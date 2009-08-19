@@ -122,6 +122,7 @@ class ResultsManager(object):
     def __init__(self):
         self.results = {}
         self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        print 'results manager invoked'
 
     def __getitem__(self, item):
         if isinstance(self.results[item], multiprocessing.pool.ApplyResult):
@@ -191,20 +192,34 @@ def retrieve_results():
     __rm__['x'] = __rm__.run(the_simplest_function, [])
     return __rm__['x']
 
+def pre_several_results():
+    x = the_simplest_function()
+    y = the_simplest_function()
+    return x + y
+
+def several_results():
+    __rm__ = ResultsManager()
+    __rm__['x'] = __rm__.run(the_simplest_function, [])
+    __rm__['y'] = __rm__.run(the_simplest_function, [])
+    return __rm__['x'] + __rm__['y']
+
 def ast_dump_scrub(node):
     import re
     d = ast.dump(node)
     return re.sub("FunctionDef\(name='[^']*'", '', d)
 
 def test_parallelization():
-    #print ast_dump_scrub(function_to_ast(pre_simple_parallelization))
-    #print ast_dump_scrub(parallelize(pre_simple_parallelization))
-    print ast_dump_scrub(parallelize(pre_retrieve_results))
-    print ast_dump_scrub(function_to_ast(retrieve_results))
+    #print ast_dump_scrub(parallelize(pre_retrieve_results))
+    #print ast_dump_scrub(function_to_ast(retrieve_results))
     assert ast_dump_scrub(parallelize(pre_simple_parallelization))== \
            ast_dump_scrub(function_to_ast(simple_parallelization_step2))
     assert ast_dump_scrub(parallelize(pre_retrieve_results))== \
            ast_dump_scrub(function_to_ast(retrieve_results))
+    assert ast_dump_scrub(parallelize(pre_several_results))== \
+           ast_dump_scrub(function_to_ast(several_results))
 
 if __name__ == '__main__':
-    print retrieve_results()
+    ast = ast.fix_missing_locations(parallelize(pre_retrieve_results))
+    code = compile(ast, '<unknown>', 'exec')
+    exec code in locals()
+    print pre_retrieve_results()

@@ -115,30 +115,59 @@ def test_is_functional():
     yield check, tuple_assignment, False
     yield check, calls_a_non_functional_function, False
 
+import multiprocessing
+import multiprocessing.pool
+
 class ResultsManager(object):
     def __init__(self):
-        pass
+        self.results = {}
+        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
 
     def __getitem__(self, item):
-        return item
+        if isinstance(self.results[item], multiprocessing.pool.ApplyResult):
+            self.results[item] = self.results[item].get()
+        return self.results[item]
 
     def __setitem__(self, item, value):
-        pass
+        self.results[item] = value
+
+    def run(self, function, args):
+        return self.pool.apply_async(function, args)
 
 class ParallelizingTransformer(ast.NodeTransformer):
+    def __init__(self):
+        self.seen_variables = {}
+        super(ast.NodeTransformer, self).__init__()
+
+    def visit_FunctionDef(self, node):
+        new_node = copy(node)
+        new_node.body = []
+        new_node.body.append(ast.Assign(targets=[ast.Name(id='__rm__', ctx=ast.Store())], value=ast.Call(func=ast.Name(id='ResultsManager', ctx=ast.Load()), args=[], keywords=[], starargs=None, kwargs=None)))
+        for item in node.body:
+            new_node.body.append(self.visit(item))
+        return new_node
+
     def visit_Assign(self, node):
         # we only want to perform parallelization under certain conditions
         if isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
 
             original_target = node.targets[0].id
+            self.seen_variables[original_target] = True
             original_function = node.value.func.id
             original_args = node.value.args
             new_node = copy(node)
             new_node.targets = [ast.Subscript(value=ast.Name(id='__rm__', ctx=ast.Load()), slice=ast.Index(value=ast.Str(s=original_target)), ctx=ast.Store())]
+            new_node.value = ast.Call(func=ast.Attribute(value=ast.Name(id='__rm__', ctx=ast.Load()), attr='run', ctx=ast.Load()), args=[ast.Name(id=node.value.func.id, ctx=ast.Load()), ast.List(elts=[], ctx=ast.Load())], keywords=[], starargs=None, kwargs=None)
             return ast.copy_location(new_node, node)
 
+    def visit_Name(self, node):
+        if node.id in self.seen_variables:
+            node = ast.Subscript(value=ast.Name(id='__rm__', ctx=ast.Load()), slice=ast.Index(value=ast.Str(s=node.id)), ctx=ast.Load())
+        return node
+
 def parallelize(fun):
-    return ParallelizingTransformer().visit(function_to_ast(fun))
+    pt = ParallelizingTransformer()
+    return pt.visit(function_to_ast(fun))
 
 def the_simplest_function():
     return 10
@@ -146,14 +175,36 @@ def the_simplest_function():
 def pre_simple_parallelization():
     x = the_simplest_function()
 
-def simple_parallelization():
+def simple_parallelization_step1():
+    __rm__['x'] = the_simplest_function()
+
+def simple_parallelization_step2():
     __rm__ = ResultsManager()
-    __rm__['x'] = __rm__.run(the_simplest_function)
+    __rm__['x'] = __rm__.run(the_simplest_function, [])
+
+def pre_retrieve_results():
+    x = the_simplest_function()
+    return x
+
+def retrieve_results():
+    __rm__ = ResultsManager()
+    __rm__['x'] = __rm__.run(the_simplest_function, [])
+    return __rm__['x']
+
+def ast_dump_scrub(node):
+    import re
+    d = ast.dump(node)
+    return re.sub("FunctionDef\(name='[^']*'", '', d)
 
 def test_parallelization():
-    print ast.dump(parallelize(pre_simple_parallelization))
-    print(ast.dump(function_to_ast(simple_parallelization)))
-    print(ast.dump(function_to_ast(pre_simple_parallelization)))
-    assert 0
-    assert ast.dump(function_to_ast(parallelize(pre_simple_parallelization)) )== \
-           ast.dump(function_to_ast(simple_parallelization))
+    #print ast_dump_scrub(function_to_ast(pre_simple_parallelization))
+    #print ast_dump_scrub(parallelize(pre_simple_parallelization))
+    print ast_dump_scrub(parallelize(pre_retrieve_results))
+    print ast_dump_scrub(function_to_ast(retrieve_results))
+    assert ast_dump_scrub(parallelize(pre_simple_parallelization))== \
+           ast_dump_scrub(function_to_ast(simple_parallelization_step2))
+    assert ast_dump_scrub(parallelize(pre_retrieve_results))== \
+           ast_dump_scrub(function_to_ast(retrieve_results))
+
+if __name__ == '__main__':
+    print retrieve_results()

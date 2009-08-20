@@ -28,6 +28,9 @@ class FunctionalVisitor(ast.NodeVisitor):
         self.problems = []
         super(ast.NodeVisitor, self).__init__()
     
+    def visit_Print(self, node):
+        self.problems.append('prints which is a side-effect')
+
     def visit_Call(self, node):
         if type(node.func) == ast.Name:
             func = self.globals[node.func.id]
@@ -70,7 +73,10 @@ def functional(fun):
         is not strictly functional'''
     if not is_functional(fun):
         quit('The function "%s" is not strictly functional.' % fun.__name__)
-    return fun
+    ast_code = ast.fix_missing_locations(parallelize(fun))
+    code = compile(ast_code, '<unknown>', 'exec')
+    exec code in fun.func_globals
+    return fun.func_globals[fun.__name__]
 
 def calling_a_method():
     awesome.callmethod()
@@ -217,9 +223,24 @@ def test_parallelization():
            ast_dump_scrub(function_to_ast(retrieve_results))
     assert ast_dump_scrub(parallelize(pre_several_results))== \
            ast_dump_scrub(function_to_ast(several_results))
+def x():
+    print 'awesome'
+    print('awesome')
+    return 10
+
+def y():
+    return 20
+
+def z():
+    a = x()
+    b = y()
+    return a + b
+
+z = functional(z)
 
 if __name__ == '__main__':
-    ast = ast.fix_missing_locations(parallelize(pre_retrieve_results))
-    code = compile(ast, '<unknown>', 'exec')
-    exec code in locals()
-    print pre_retrieve_results()
+    #ast = ast.fix_missing_locations(parallelize(pre_retrieve_results))
+    #code = compile(ast, '<unknown>', 'exec')
+    #exec code in locals()
+    #print pre_retrieve_results()
+    print z()

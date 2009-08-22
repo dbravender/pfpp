@@ -30,7 +30,6 @@ class FunctionalVisitor(ast.NodeVisitor):
     def visit_Call(self, node):
         if type(node.func) == ast.Name:
             func = self.globals[node.func.id]
-            print "Calling " + node.func.id
             if not is_functional(func):
                 self.problems.append('calls %s which is not strictly functional' % func.__name__)
 

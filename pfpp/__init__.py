@@ -2,10 +2,6 @@ import inspect, ast, re, compiler
 from pprint import pprint
 from copy import copy
 
-# The irony of the pfun module is that its purpose is to detect non-functional code
-# but it is written in non-functional code... since Python's ast walkers are object
-# oriented ^^
-
 def function_to_ast(fun):
     definition = inspect.getsource(fun)
     lines = definition.split("\n")

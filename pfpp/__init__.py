@@ -30,6 +30,7 @@ class FunctionalVisitor(ast.NodeVisitor):
     def visit_Call(self, node):
         if type(node.func) == ast.Name:
             func = self.globals[node.func.id]
+            print "Calling " + node.func.id
             if not is_functional(func):
                 self.problems.append('calls %s which is not strictly functional' % func.__name__)
 
@@ -54,6 +55,8 @@ class FunctionalVisitor(ast.NodeVisitor):
                     self.problems.append('variable "%s" is assigned to more than once' % target_name)
                 else:
                     self.assigned_vars.append(target_name)
+            self.visit(target)
+        self.visit(node.value)
 
 def is_functional(fun):
     fv = FunctionalVisitor(fun.func_globals)
@@ -102,8 +105,14 @@ def not_functional():
     a = 10
     a = 20
 
+def print_is_a_side_effect():
+    print('I produce side effects')
+
 def calls_a_non_functional_function():
-    not_functional()
+    print_is_a_side_effect()
+
+def assigns_to_a_non_functional_function():
+    x = print_is_a_side_effect()
 
 def check(fun, expected):
     assert is_functional(fun) == expected, '%s %s supposed to be functional' % \
@@ -116,6 +125,8 @@ def test_is_functional():
     yield check, subscript_assignment, False
     yield check, tuple_assignment, False
     yield check, calls_a_non_functional_function, False
+    yield check, print_is_a_side_effect, False
+    yield check, assigns_to_a_non_functional_function, False
 
 import multiprocessing
 import multiprocessing.pool
@@ -220,8 +231,6 @@ def test_parallelization():
     assert ast_dump_scrub(parallelize(pre_several_results))== \
            ast_dump_scrub(function_to_ast(several_results))
 def x():
-    print 'awesome'
-    print('awesome')
     return 10
 
 def y():

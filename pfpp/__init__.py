@@ -18,9 +18,10 @@ def function_to_ast(fun):
         return ast.parse(definition)
 
 class FunctionalVisitor(ast.NodeVisitor):
-    def __init__(self, globals):
+    def __init__(self, func_name, globals):
         self.assigned_vars = []
         self.globals = globals
+        self.func_name = func_name
         self.problems = []
         super(ast.NodeVisitor, self).__init__()
     
@@ -30,8 +31,14 @@ class FunctionalVisitor(ast.NodeVisitor):
     def visit_Call(self, node):
         if type(node.func) == ast.Name:
             func = self.globals[node.func.id]
-            if not is_functional(func):
-                self.problems.append('calls %s which is not strictly functional' % func.__name__)
+            try:
+                # catches recursive functions 
+                # which would cause an infinite loop
+                if func.__name__ != self.func_name:
+                    if not is_functional(func):
+                        self.problems.append('calls %s which is not strictly functional' % func.__name__)
+            except:
+                pass
 
         if type(node.func) == ast.Attribute:
             if type(node.func.value) == ast.Name:
@@ -58,7 +65,7 @@ class FunctionalVisitor(ast.NodeVisitor):
         self.visit(node.value)
 
 def is_functional(fun):
-    fv = FunctionalVisitor(fun.func_globals)
+    fv = FunctionalVisitor(func_name=fun.__name__, globals=fun.func_globals)
     fv.visit(function_to_ast(fun))
     if len(fv.problems):
         for problem in fv.problems:
@@ -74,7 +81,15 @@ def functional(fun):
     ast_code = ast.fix_missing_locations(parallelize(fun))
     code = compile(ast_code, '<unknown>', 'exec')
     exec code in fun.func_globals
-    return fun.func_globals[fun.__name__]
+    responses = {}
+    fun = fun.func_globals[fun.__name__]
+    def memoized_fun(*args):
+        if args in responses:
+            return responses[args]
+        responses[args] = fun(*args)
+        return responses[args]
+    memoized_fun.__name__ = fun.__name__
+    return memoized_fun
 
 def calling_a_method():
     awesome.callmethod()
@@ -133,8 +148,7 @@ import multiprocessing.pool
 class ResultsManager(object):
     def __init__(self):
         self.results = {}
-        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
-        print 'results manager invoked'
+        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count() + 1)
 
     def __getitem__(self, item):
         if isinstance(self.results[item], multiprocessing.pool.ApplyResult):
@@ -229,10 +243,15 @@ def test_parallelization():
            ast_dump_scrub(function_to_ast(retrieve_results))
     assert ast_dump_scrub(parallelize(pre_several_results))== \
            ast_dump_scrub(function_to_ast(several_results))
+
+from time import sleep
+
 def x():
+    sleep(2)
     return 10
 
 def y():
+    sleep(2)
     return 20
 
 def z():
@@ -243,8 +262,4 @@ def z():
 z = functional(z)
 
 if __name__ == '__main__':
-    #ast = ast.fix_missing_locations(parallelize(pre_retrieve_results))
-    #code = compile(ast, '<unknown>', 'exec')
-    #exec code in locals()
-    #print pre_retrieve_results()
     print z()

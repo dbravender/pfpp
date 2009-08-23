@@ -83,6 +83,8 @@ def functional(fun):
     exec code in fun.func_globals
     responses = {}
     fun = fun.func_globals[fun.__name__]
+    __rm__ = ResultsManager()
+    fun.func_globals['__rm__'] = __rm__
     def memoized_fun(*args):
         if args in responses:
             return responses[args]
@@ -161,6 +163,9 @@ class ResultsManager(object):
     def run(self, function, args):
         return self.pool.apply_async(function, args)
 
+    def reset(self):
+        self.results = {}
+
 class ParallelizingTransformer(ast.NodeTransformer):
     def __init__(self):
         self.seen_variables = {}
@@ -169,7 +174,7 @@ class ParallelizingTransformer(ast.NodeTransformer):
     def visit_FunctionDef(self, node):
         new_node = copy(node)
         new_node.body = []
-        new_node.body.append(ast.Assign(targets=[ast.Name(id='__rm__', ctx=ast.Store())], value=ast.Call(func=ast.Name(id='ResultsManager', ctx=ast.Load()), args=[], keywords=[], starargs=None, kwargs=None)))
+        new_node.body.append(ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Name(id='__rm__', ctx=ast.Load()), attr='reset', ctx=ast.Load()), args=[], keywords=[], starargs=None, kwargs=None)))
         for item in node.body:
             new_node.body.append(self.visit(item))
         return new_node
@@ -202,11 +207,8 @@ def the_simplest_function():
 def pre_simple_parallelization():
     x = the_simplest_function()
 
-def simple_parallelization_step1():
-    __rm__['x'] = the_simplest_function()
-
-def simple_parallelization_step2():
-    __rm__ = ResultsManager()
+def simple_parallelization():
+    __rm__.reset()
     __rm__['x'] = __rm__.run(the_simplest_function, [])
 
 def pre_retrieve_results():
@@ -214,7 +216,7 @@ def pre_retrieve_results():
     return x
 
 def retrieve_results():
-    __rm__ = ResultsManager()
+    __rm__.reset()
     __rm__['x'] = __rm__.run(the_simplest_function, [])
     return __rm__['x']
 
@@ -224,7 +226,7 @@ def pre_several_results():
     return x + y
 
 def several_results():
-    __rm__ = ResultsManager()
+    __rm__.reset()
     __rm__['x'] = __rm__.run(the_simplest_function, [])
     __rm__['y'] = __rm__.run(the_simplest_function, [])
     return __rm__['x'] + __rm__['y']
@@ -235,10 +237,10 @@ def ast_dump_scrub(node):
     return re.sub("FunctionDef\(name='[^']*'", '', d)
 
 def test_parallelization():
-    #print ast_dump_scrub(parallelize(pre_retrieve_results))
-    #print ast_dump_scrub(function_to_ast(retrieve_results))
+    print ast_dump_scrub(parallelize(pre_retrieve_results))
+    print ast_dump_scrub(function_to_ast(retrieve_results))
     assert ast_dump_scrub(parallelize(pre_simple_parallelization))== \
-           ast_dump_scrub(function_to_ast(simple_parallelization_step2))
+           ast_dump_scrub(function_to_ast(simple_parallelization))
     assert ast_dump_scrub(parallelize(pre_retrieve_results))== \
            ast_dump_scrub(function_to_ast(retrieve_results))
     assert ast_dump_scrub(parallelize(pre_several_results))== \

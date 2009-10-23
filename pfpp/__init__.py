@@ -68,7 +68,7 @@ def is_functional(fun):
     fv = FunctionalVisitor(func_name=fun.__name__, globals=fun.func_globals)
     fv.visit(function_to_ast(fun))
     if len(fv.problems):
-        for problem in fv.problems:
+        for problem in set(fv.problems):
             print('function %s: %s' % (fun.__name__, problem))
         return False
     return True
@@ -91,6 +91,7 @@ def functional(fun):
         responses[args] = fun(*args)
         return responses[args]
     memoized_fun.__name__ = fun.__name__
+    memoized_fun.__doc__ = fun.__doc__
     return memoized_fun
 
 def calling_a_method():

@@ -1,4 +1,9 @@
+import sys, os
+sys.path.append(os.path.realpath(__file__ + '/../../'))
 from pfpp import is_functional, functional, parallelize, ast, function_to_ast
+
+def uses_globals():
+    global a
 
 def calling_a_method():
     awesome.callmethod()
@@ -50,6 +55,7 @@ def test_is_functional():
     yield check, calls_a_non_functional_function, False
     yield check, print_is_a_side_effect, False
     yield check, assigns_to_a_non_functional_function, False
+    yield check, uses_globals, False
 
 def the_simplest_function():
     return 10
@@ -95,5 +101,3 @@ def test_parallelization():
            ast_dump_scrub(function_to_ast(retrieve_results))
     assert ast_dump_scrub(parallelize(pre_several_results))== \
            ast_dump_scrub(function_to_ast(several_results))
-
-

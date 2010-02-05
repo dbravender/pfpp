@@ -24,7 +24,10 @@ class FunctionalVisitor(ast.NodeVisitor):
         self.func_name = func_name
         self.problems = []
         super(ast.NodeVisitor, self).__init__()
-    
+
+    def visit_Global(self, node):
+        self.problems.append('accesses global variables')
+
     def visit_Print(self, node):
         self.problems.append('prints which is a side-effect')
 
